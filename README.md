@@ -5,8 +5,8 @@ This DKMS Module only works with 'FTE0001' TouchPad found in 'Haier Y11C' and **
 
 Installation
 ```
-dkms add ./focaltech-dkms
-dkms install -m focaltech -v 2.0
+sudo dkms add ./focaltech-dkms
+sudo dkms install -m focaltech -v 2.0
 ```
 Uninstallation
 ```
