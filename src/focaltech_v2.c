@@ -6,20 +6,25 @@
 #include "psmouse.h"
 #include "focaltech_v2.h"
 
-
-static const char * const focaltech_pnp_ids[] = {
-	"FTE0001",
-	NULL
+static const struct fte_command switch_protocol[] = {
+	{PSMOUSE_CMD_SETRATE, 	 0xea},
+	{PSMOUSE_CMD_SETRATE,	 0xed},
+	{PSMOUSE_CMD_ENABLE, 	 0x00},
 };
+
+static const char *const focaltech_pnp_ids[] = {
+	"FTE0001",
+	NULL};
 
 int focaltech_detect(struct psmouse *psmouse, bool set_properties)
 {
 	if (!psmouse_matches_pnp_id(psmouse, focaltech_pnp_ids))
 		return -ENODEV;
 
-	if (set_properties) {
+	if (set_properties)
+	{
 		psmouse->vendor = "FocalTech";
-		psmouse->name = "Touchpad";
+		psmouse->name = "Touchpad FTE0001";
 	}
 
 	return 0;
@@ -34,105 +39,100 @@ static void focaltech_report_state(struct psmouse *psmouse)
 	struct input_dev *dev = psmouse->dev;
 	int i;
 
-	for (i = 0; i < FOC_MAX_FINGERS; i++) {
+	for (i = 0; i < FOCALTECH_MAX_FINGERS; i++)
+	{
 		struct focaltech_finger_state *finger = &state->fingers[i];
 		input_mt_slot(dev, i);
-		input_mt_report_slot_state(dev, MT_TOOL_FINGER, finger->active);
-		if (finger->active) {
+		input_mt_report_slot_state(dev, MT_TOOL_FINGER, finger->valid);
+		if (finger->valid)
+		{
 			input_report_abs(dev, ABS_MT_POSITION_X, finger->x);
 			input_report_abs(dev, ABS_MT_POSITION_Y, finger->y);
-			input_report_abs(dev, ABS_MT_TOUCH_MAJOR, finger->Length);
-			input_report_abs(dev, ABS_MT_TOUCH_MINOR, finger->Width);
+			input_report_abs(dev, ABS_MT_TOUCH_MAJOR, finger->major);
+			input_report_abs(dev, ABS_MT_TOUCH_MINOR, finger->minor);
+			input_report_abs(dev, ABS_MT_PRESSURE, finger->pressure);
 		}
 	}
 	input_mt_sync_frame(dev);
-	input_report_key(dev, BTN_LEFT, state->leftPresseed);
-	input_report_key(dev, BTN_RIGHT, state->rightPresseed);
+	input_report_key(dev, BTN_LEFT, state->left);
+	input_report_key(dev, BTN_RIGHT, state->right);
 	input_mt_report_finger_count(dev, state->fingerCount);
 	input_sync(dev);
 }
 
 static void focaltech_process_packet(struct psmouse *psmouse)
 {
-    unsigned char *packet = psmouse->packet;
-    struct focaltech_data *priv = psmouse->private;
+	unsigned char *packet = psmouse->packet;
+	struct focaltech_data *priv = psmouse->private;
 	struct focaltech_hw_state *state = &priv->state;
-	int i, j, k, m, n;
+	int i, j;
 
-    if (!priv->isReadNext)
-    {
-        for (i = 0; i < 8; i++)
-            priv->infoData[i] = packet[i];
-        for (i = 8; i < 16; i++)
-            priv->infoData[i] = 0xff;
-		if ((packet[4] & 3) + ((packet[4] & 48) >> 2) > 2 && (packet[0] != 0xff && packet[1] != 0xff && packet[2] != 0xff && packet[3] != 0xff) && (packet[0] & 48) != 32)
-            {
-                priv->isReadNext = true;
-            }
-        state->fingerCount = (int)(packet[4] & 3) + ((packet[4] & 48) >> 2);
-    }
-    else
-    {
-        priv->isReadNext = false;
-        for (i = 8; i < 16; i++)
-            priv->infoData[i] = packet[i-8];
-    }
-    if (!priv->isReadNext)
-    {
-        if (!(priv->infoData[0] == 0xff && priv->infoData[1] == 0xff && priv->infoData[2] == 0xff && priv->infoData[3] == 0xff))
-        {
-            if ((priv->infoData[0] & 1) == 1)   // 0x0d & 0x01 == 1 (Left Button)
-                state->leftPresseed = true;
+	if (!priv->isReadNext)
+	{
+		for (i = 0; i < 8; i++)
+			priv->lastDeviceData[i] = packet[i];
+		for (i = 8; i < 16; i++)
+			priv->lastDeviceData[i] = 0xff;
+		state->fingerCount = (int)(packet[4] & 3) + ((packet[4] & 48) >> 2);
+		if ((state->fingerCount > 2) && (packet[0] != 0xff && packet[1] != 0xff && packet[2] != 0xff && packet[3] != 0xff) && (packet[0] & 48) != 32)
+		{
+			priv->isReadNext = true;
+		}
+	}
+	else
+	{
+		priv->isReadNext = false;
+		for (i = 8; i < 16; i++)
+			priv->lastDeviceData[i] = packet[i - 8];
+	}
+	if (!priv->isReadNext)
+	{
+		if (!(priv->lastDeviceData[0] == 0xff && priv->lastDeviceData[1] == 0xff && priv->lastDeviceData[2] == 0xff && priv->lastDeviceData[3] == 0xff))
+		{
+			if ((priv->lastDeviceData[0] & 1) == 1)
+				state->left = true;
 			else
-                state->leftPresseed = false;
-            if ((priv->infoData[0] & 2) == 2)   // 0x0e & 0x02 == 2 (Right Button)
-                state->rightPresseed = true;
+				state->left = false;
+			if ((priv->lastDeviceData[0] & 2) == 2)
+				state->right = true;
 			else
-			    state->rightPresseed = false;
-            if ((priv->infoData[0] & 48) == 16) // 0x1c & 0x30 == 16 (Elipse)
-            {
-                for (i = 0; i < 4; i++)
-                {
-                    int j = 0;
-                    for (k = (i * (j+4)); j < 4; j++){
-                    	if (priv->infoData[k+1] != 0xff && priv->infoData[k+2] != 0xff && priv->infoData[k+3] != 0xff)
-                    	{
-                        	state->fingers[i].Length = priv->infoData[k+1];
-                        	state->fingers[i].Width = priv->infoData[k+2];
-                    	}
+				state->right = false;
+			if ((priv->lastDeviceData[0] & 48) == 16)
+			{
+				for (i = 0; i < 4; i++)
+				{
+					j = i * 4;
+					if (!((priv->lastDeviceData[j + 1] == 0xff) && (priv->lastDeviceData[j + 2] == 0xff) && (priv->lastDeviceData[j + 3] == 0xff)))
+					{
+						
+						state->fingers[i].minor = priv->lastDeviceData[j + 1];
+						state->fingers[i].major = priv->lastDeviceData[j + 2];
+						state->fingers[i].pressure = priv->lastDeviceData[j + 3] * 2;
+						if (state->fingers[i].pressure > MAX_PRESSURE)
+							state->fingers[i].pressure = MAX_PRESSURE;
 					}
-                }
-            }
-            else
-            {
-                for (k = 0; k < 4; k++)
-                {
-                    m = 0;
-                    for (n = k * (m+4); m < 4; m++)
-                    {
-						if (priv->infoData[n+1] != 0xff && priv->infoData[n+2] != 0xff && priv->infoData[n+3] != 0xff)
-                    	{
-							state->fingers[k].active = true;
-                        	state->fingers[k].x = (priv->infoData[n+1] << 4) + ((priv->infoData[n+3] & 240) >> 4);
-                        	state->fingers[k].y = (priv->infoData[n+2] << 4) + (priv->infoData[n+3] & 15);
-                    	}
-						else
-							state->fingers[k].active = false;
-                    }
-                    
-                }
-                if (state->fingerCount == 0)
-                {
-                    for (i = 0; i < 4; i++)
-                    {
-						state->fingers[i].active = false;
-                        state->fingers[i].Length = 0;
-                        state->fingers[i].Width = 0;
-                    }
-                }
-            }
-        }
-    }
+				}
+			}
+			else
+			{
+				for (i = 0; i < 4; i++)
+				{
+					j = i * 4;
+					if (!((priv->lastDeviceData[j + 1] == 0xff) && (priv->lastDeviceData[j + 2] == 0xff) && (priv->lastDeviceData[j + 3] == 0xff)))
+					{
+						state->fingers[i].valid = true;
+						state->fingers[i].x = (priv->lastDeviceData[j + 1] << 4) + ((priv->lastDeviceData[j + 3] & 240) >> 4);
+						state->fingers[i].y = (priv->lastDeviceData[j + 2] << 4) + (priv->lastDeviceData[j + 3] & 15);
+					}
+					else
+						state->fingers[i].valid = false;
+				}
+			}
+			if (state->fingerCount == 0)
+				for (i = 0; i < 4; i++)
+					state->fingers[i].valid = false;
+		}
+	}
 	focaltech_report_state(psmouse);
 }
 
@@ -142,32 +142,22 @@ static psmouse_ret_t focaltech_process_byte(struct psmouse *psmouse)
 		focaltech_process_packet(psmouse);
 		return PSMOUSE_FULL_PACKET;
 	}
-
-	/*
-	 * We might want to do some validation of the data here, but
-	 * we do not know the protocol well enough
-	 */
 	return PSMOUSE_GOOD_DATA;
 }
 
 static int focaltech_switch_protocol(struct psmouse *psmouse)
 {
 	struct ps2dev *ps2dev = &psmouse->ps2dev;
+	unsigned char param[4];
+	size_t i;
 
-	if (ps2_command(ps2dev, NULL, 0x00f3))
-		return -EIO;
-
-	if (ps2_command(ps2dev, NULL, 0x00ea))
-		return -EIO;
-
-	if (ps2_command(ps2dev, NULL, 0x00f3))
-		return -EIO;
-
-	if (ps2_command(ps2dev, NULL, 0x00ed))
-		return -EIO;
-
-	if (ps2_command(ps2dev, NULL, PSMOUSE_CMD_ENABLE))
-		return -EIO;
+	for (i = 0; i < ARRAY_SIZE(switch_protocol); ++i)
+	{
+		memset(param, 0, sizeof(param));
+		param[0] = switch_protocol[i].data;
+		if (ps2_command(ps2dev, param, switch_protocol[i].command))
+			return -EIO;
+	}
 
 	return 0;
 }
@@ -192,7 +182,8 @@ static int focaltech_reconnect(struct psmouse *psmouse)
 	focaltech_reset(psmouse);
 
 	error = focaltech_switch_protocol(psmouse);
-	if (error) {
+	if (error)
+	{
 		psmouse_err(psmouse, "Unable to initialize the device\n");
 		return error;
 	}
@@ -203,7 +194,6 @@ static int focaltech_reconnect(struct psmouse *psmouse)
 static void focaltech_set_input_params(struct psmouse *psmouse)
 {
 	struct input_dev *dev = psmouse->dev;
-	struct focaltech_data *priv = psmouse->private;
 
 	/*
 	 * Undo part of setup done for us by psmouse core since touchpad
@@ -217,25 +207,19 @@ static void focaltech_set_input_params(struct psmouse *psmouse)
 	 * Now set up our capabilities.
 	 */
 	__set_bit(EV_ABS, dev->evbit);
-	input_set_abs_params(dev, ABS_MT_POSITION_X, 0, priv->x_max, 0, 0);
-	input_set_abs_params(dev, ABS_MT_POSITION_Y, 0, priv->y_max, 0, 0);
-	input_set_abs_params(dev, ABS_MT_TOUCH_MINOR, 0, 14, 0, 0);
-	input_set_abs_params(dev, ABS_MT_TOUCH_MAJOR, 0, 9, 0, 0);
-	input_mt_init_slots(dev, 4, INPUT_MT_POINTER);
+	input_set_abs_params(dev, ABS_MT_POSITION_X, 0, MAX_X, 0, 0);
+	input_set_abs_params(dev, ABS_MT_POSITION_Y, 0, MAX_Y, 0, 0);
+	input_set_abs_params(dev, ABS_MT_PRESSURE, 0, MAX_PRESSURE, 0, 0);
+	input_set_abs_params(dev, ABS_MT_TOUCH_MINOR, 0, MAX_MAJOR, 0, 0);
+	input_set_abs_params(dev, ABS_MT_TOUCH_MAJOR, 0, MAX_MINOR, 0, 0);
+	input_mt_init_slots(dev, FOCALTECH_MAX_FINGERS, INPUT_MT_POINTER);
+
+	/* 87mm x 40mm */
+	input_abs_set_res(dev, ABS_MT_POSITION_X, 26);
+	input_abs_set_res(dev, ABS_MT_POSITION_Y, 25);
 }
 
-static int focaltech_read_size(struct psmouse *psmouse)
-{
-	struct focaltech_data *priv = psmouse->private;
-
-	priv->x_max = 2272; 
-	priv->y_max = 992;
-
-	return 0;
-}
-
-static void focaltech_set_resolution(struct psmouse *psmouse,
-				     unsigned int resolution)
+static void focaltech_set_resolution(struct psmouse *psmouse, unsigned int resolution)
 {
 	/* not supported yet */
 }
@@ -245,8 +229,7 @@ static void focaltech_set_rate(struct psmouse *psmouse, unsigned int rate)
 	/* not supported yet */
 }
 
-static void focaltech_set_scale(struct psmouse *psmouse,
-				enum psmouse_scale scale)
+static void focaltech_set_scale(struct psmouse *psmouse, enum psmouse_scale scale)
 {
 	/* not supported yet */
 }
@@ -256,22 +239,15 @@ int focaltech_init(struct psmouse *psmouse)
 	struct focaltech_data *priv;
 	int error;
 
-	psmouse->private = priv = kzalloc(sizeof(struct focaltech_data),
-					  GFP_KERNEL);
+	psmouse->private = priv = kzalloc(sizeof(struct focaltech_data), GFP_KERNEL);
 	if (!priv)
 		return -ENOMEM;
 
 	focaltech_reset(psmouse);
 
-	error = focaltech_read_size(psmouse);
-	if (error) {
-		psmouse_err(psmouse,
-			    "Unable to read the size of the touchpad\n");
-		goto fail;
-	}
-
 	error = focaltech_switch_protocol(psmouse);
-	if (error) {
+	if (error)
+	{
 		psmouse_err(psmouse, "Unable to initialize the device\n");
 		goto fail;
 	}
