@@ -1,15 +1,16 @@
 
 ## focaltech-dkms
 
-FocalTech PS/2 (FTE0001) TouchPad DKMS Driver, Tested on Ubuntu 19.10 running kernel version 5.30
+FocalTech PS/2 (FTE0001) Touchpad DKMS Driver, Tested on Ubuntu 19.10 running kernel version 5.30
 
-This DKMS Module only works with `FTE0001` TouchPad found in `Haier Y11C` and **doesn't work** with older FocalTech Devices (FLT0101, FLT0102, FLT0103)
+This DKMS Module is for Haier Y11C, ACPI Device name `FTE0001`
+
+Horizontal Edge Scrolling will not work as libinput require height>=40mm
 
 ### ChangeLog
-
-* Fixed a bug that rejected input at specific locations on Touchpad
-
+* Fixed Device Resolution
 * Improved Cursor Movement
+* Fixed a bug that rejected input at specific locations on Touchpad
 
 ### Installation
 ```
