@@ -24,7 +24,7 @@ int focaltech_detect(struct psmouse *psmouse, bool set_properties)
 	if (set_properties)
 	{
 		psmouse->vendor = "FocalTech";
-		psmouse->name = "Touchpad FTE0001";
+		psmouse->name = "Touchpad";
 	}
 
 	return 0;
@@ -212,11 +212,9 @@ static void focaltech_set_input_params(struct psmouse *psmouse)
 	input_set_abs_params(dev, ABS_MT_PRESSURE, 0, MAX_PRESSURE, 0, 0);
 	input_set_abs_params(dev, ABS_MT_TOUCH_MINOR, 0, MAX_MAJOR, 0, 0);
 	input_set_abs_params(dev, ABS_MT_TOUCH_MAJOR, 0, MAX_MINOR, 0, 0);
+	input_abs_set_res(dev, ABS_MT_POSITION_X, RESOLUTION);
+	input_abs_set_res(dev, ABS_MT_POSITION_Y, RESOLUTION);
 	input_mt_init_slots(dev, FOCALTECH_MAX_FINGERS, INPUT_MT_POINTER);
-
-	/* 87mm x 40mm */
-	input_abs_set_res(dev, ABS_MT_POSITION_X, 26);
-	input_abs_set_res(dev, ABS_MT_POSITION_Y, 25);
 }
 
 static void focaltech_set_resolution(struct psmouse *psmouse, unsigned int resolution)
