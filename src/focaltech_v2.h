@@ -2,19 +2,9 @@
 #define _FOCALTECH_V2_H
 
 #define FOCALTECH_MAX_FINGERS 4
-
-/* 
-
-MAX_X reported by touchpad is 0x03E0 (992 decimal),
-With MAX_X set to 0x03E0 cursor movement is unnatural. 
-
-While MAX_X 0x0550 (1360 decimal) results in quite natural cursor movement,
-downside of using 0x0550 is that Horizontal Edge scrolling won't work.
-
-*/
-
-#define MAX_X 	0x08E0  /* 2272 */
-#define MAX_Y 	0x0550  /* 1360 */
+#define MAX_X			0x08E0  /* 2272 */
+#define MAX_Y			0x03E0  /* 992 */
+#define RESOLUTION 		26	/* 87mm x 38mm */
 #define MAX_MAJOR 		10
 #define MAX_MINOR 		10
 #define MAX_PRESSURE 	127
